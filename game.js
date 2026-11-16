@@ -1,0 +1,465 @@
+// =====================================================================
+//  I DON'T KNOW — Random Chaos
+//  Survive as long as you can. Every few seconds the rules change!
+// =====================================================================
+
+
+// ============ SETTINGS — change these numbers! ============
+const SETTINGS = {
+  chaosEvery: 10,          // seconds between chaos changes
+  playerSpeed: 560,        // how fast you move (pixels per second)
+  playerSize: 28,          // size of your square
+  startLives: 5,           // lives at the start
+  enemySpeed: 130,         // how fast enemies move
+  enemySize: 14,           // enemy radius
+  enemySpawnEvery: 1.1,    // seconds between new enemies
+  coinSpawnEvery: 2,       // seconds between new coins
+  coinPoints: 10,          // points for a coin
+  friendPoints: 5,         // points for hugging a friendly enemy
+  difficultyRamp: 60,      // enemies get faster over time (lower = harder faster)
+};
+
+// ============ COLORS — change the look! ============
+const COLORS = {
+  background: "#170096",
+  player: "#66acc6",
+  enemy: "#ff4d6d",
+  friend: "#8cc6a4",
+  coin: "#e0af0e",
+  text: "#ffffff",
+  banner: "#6729a0",
+};
+
+
+// ============ CHAOS EVENTS — add your own! ============
+// Each event changes "mods" (the game's rules).
+// Before every new event, all mods go back to normal.
+// To add one, copy a line and change the name and what it does.
+const CHAOS_EVENTS = [
+  { name: "Controls Flipped!",      apply: m => { m.flipControls = true; } },
+  { name: "Gravity Down!",          apply: m => { m.gravity = 600; } },
+  { name: "Gravity Up!",            apply: m => { m.gravity = -600; } },
+  { name: "Enemies Are Friends!",   apply: m => { m.friendlyEnemies = true; } },
+  { name: "Enemies Speed Up!",      apply: m => { m.enemySpeed = 2.2; } },
+  { name: "Tiny You!",              apply: m => { m.playerScale = 0.5; } },
+  { name: "Giant You!",             apply: m => { m.playerScale = 2.2; } },
+  { name: "Ice Floor!",             apply: m => { m.slippery = true; } },
+  { name: "Lights Out!",            apply: m => { m.darkness = true; } },
+  { name: "Upside Down World!",     apply: m => { m.upsideDown = true; } },
+  { name: "Coin Rain!",             apply: m => { m.coinRate = 8; } },
+  { name: "Slow Motion!",           apply: m => { m.timeScale = 0.5; } },
+  { name: "Turbo Mode!",            apply: m => { m.timeScale = 1.6; } },
+  { name: "Enemy Party!",           apply: m => { m.enemyRate = 4; } },
+];
+
+// The normal rules (used when no chaos is active)
+function normalMods() {
+  return {
+    flipControls: false,
+    gravity: 0,
+    friendlyEnemies: false,
+    enemySpeed: 1,
+    enemyRate: 1,
+    playerScale: 1,
+    slippery: false,
+    darkness: false,
+    upsideDown: false,
+    coinRate: 1,
+    timeScale: 1,
+  };
+}
+
+
+// =====================================================================
+//  GAME ENGINE (you can change this too, it's just more code!)
+// =====================================================================
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const W = canvas.width;
+const H = canvas.height;
+
+let state = "menu"; // "menu", "play", or "over"
+let player, enemies, coins, particles;
+let score, lives, elapsed, mods, currentEvent;
+let chaosTimer, spawnTimer, coinTimer, invincible, shake;
+let bannerText = "", bannerTimer = 0;
+let best = loadBest();
+
+// ---------- Keyboard ----------
+const keys = {};
+window.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+  }
+  if ((e.key === " " || e.key === "Enter") && state !== "play") {
+    startGame();
+  }
+});
+window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+function isDown(...names) { return names.some(n => keys[n]); }
+
+// ---------- Saving best score ----------
+function loadBest() {
+  try { return Number(localStorage.getItem("idk-best")) || 0; } catch (e) { return 0; }
+}
+function saveBest(v) {
+  try { localStorage.setItem("idk-best", String(v)); } catch (e) { /* ignore */ }
+}
+
+// ---------- Start / chaos ----------
+function startGame() {
+  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, gvy: 0 };
+  enemies = [];
+  coins = [];
+  particles = [];
+  score = 0;
+  lives = SETTINGS.startLives;
+  elapsed = 0;
+  mods = normalMods();
+  currentEvent = { name: "Normal... for now" };
+  chaosTimer = SETTINGS.chaosEvery;
+  spawnTimer = 0;
+  coinTimer = 0;
+  invincible = 0;
+  shake = 0;
+  showBanner(currentEvent.name);
+  state = "play";
+}
+
+function triggerChaos() {
+  let next;
+  do {
+    next = CHAOS_EVENTS[Math.floor(Math.random() * CHAOS_EVENTS.length)];
+  } while (CHAOS_EVENTS.length > 1 && next === currentEvent);
+
+  currentEvent = next;
+  mods = normalMods();
+  next.apply(mods);
+  player.gvy = 0;
+  showBanner(next.name);
+}
+
+function showBanner(text) {
+  bannerText = text;
+  bannerTimer = 2.2;
+}
+
+// ---------- Spawning ----------
+function spawnEnemy() {
+  const r = SETTINGS.enemySize;
+  let x, y;
+  const side = Math.floor(Math.random() * 4);
+  if (side === 0) { x = Math.random() * W; y = -r; }
+  if (side === 1) { x = W + r; y = Math.random() * H; }
+  if (side === 2) { x = Math.random() * W; y = H + r; }
+  if (side === 3) { x = -r; y = Math.random() * H; }
+
+  // Aim roughly at the player
+  const angle = Math.atan2(player.y - y, player.x - x) + (Math.random() - 0.5) * 0.8;
+  const speed = SETTINGS.enemySpeed * (1 + elapsed / SETTINGS.difficultyRamp);
+  enemies.push({ x, y, r, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+}
+
+function spawnCoin() {
+  if (coins.length > 25) return;
+  coins.push({
+    x: 30 + Math.random() * (W - 60),
+    y: 30 + Math.random() * (H - 60),
+    r: 9,
+    life: 8,
+  });
+}
+
+function burst(x, y, color, count = 14) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = 60 + Math.random() * 200;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.6, color });
+  }
+}
+
+// ---------- Update ----------
+function update(realDt) {
+  bannerTimer -= realDt;
+  if (state !== "play") return;
+
+  // Chaos timer uses real time so slow-mo doesn't make it last longer
+  chaosTimer -= realDt;
+  if (chaosTimer <= 0) {
+    triggerChaos();
+    chaosTimer = SETTINGS.chaosEvery;
+  }
+
+  const dt = realDt * mods.timeScale;
+  elapsed += dt;
+  score += dt; // 1 point per second survived
+  invincible -= dt;
+  shake = Math.max(0, shake - realDt);
+
+  updatePlayer(dt);
+  updateEnemies(dt);
+  updateCoins(dt);
+  updateParticles(dt);
+}
+
+function updatePlayer(dt) {
+  let dx = (isDown("arrowright", "d") ? 1 : 0) - (isDown("arrowleft", "a") ? 1 : 0);
+  let dy = (isDown("arrowdown", "s") ? 1 : 0) - (isDown("arrowup", "w") ? 1 : 0);
+  if (mods.flipControls) { dx = -dx; dy = -dy; }
+
+  const len = Math.hypot(dx, dy) || 1;
+  const targetVx = (dx / len) * SETTINGS.playerSpeed;
+  const targetVy = (dy / len) * SETTINGS.playerSpeed;
+
+  if (mods.slippery) {
+    // Slide around like on ice
+    player.vx += (targetVx - player.vx) * Math.min(1, 1.2 * dt);
+    player.vy += (targetVy - player.vy) * Math.min(1, 1.2 * dt);
+  } else {
+    player.vx = targetVx;
+    player.vy = targetVy;
+  }
+
+  player.gvy += mods.gravity * dt;
+
+  player.x += player.vx * dt;
+  player.y += (player.vy + player.gvy) * dt;
+
+  // Keep inside the screen
+  const half = playerSize() / 2;
+  if (player.x < half) { player.x = half; player.vx = 0; }
+  if (player.x > W - half) { player.x = W - half; player.vx = 0; }
+  if (player.y < half) { player.y = half; player.vy = 0; player.gvy = Math.max(0, player.gvy); }
+  if (player.y > H - half) { player.y = H - half; player.vy = 0; player.gvy = Math.min(0, player.gvy); }
+}
+
+function playerSize() {
+  return SETTINGS.playerSize * mods.playerScale;
+}
+
+function updateEnemies(dt) {
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnEnemy();
+    spawnTimer = SETTINGS.enemySpawnEvery / mods.enemyRate;
+  }
+
+  const half = playerSize() / 2;
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.x += e.vx * mods.enemySpeed * dt;
+    e.y += e.vy * mods.enemySpeed * dt;
+
+    // Gone off screen?
+    if (e.x < -80 || e.x > W + 80 || e.y < -80 || e.y > H + 80) {
+      enemies.splice(i, 1);
+      continue;
+    }
+
+    // Touching the player?
+    if (Math.hypot(e.x - player.x, e.y - player.y) < e.r + half) {
+      if (mods.friendlyEnemies) {
+        score += SETTINGS.friendPoints;
+        burst(e.x, e.y, COLORS.friend);
+        enemies.splice(i, 1);
+      } else if (invincible <= 0) {
+        lives--;
+        invincible = 1.5;
+        shake = 0.3;
+        burst(player.x, player.y, COLORS.enemy, 24);
+        enemies.splice(i, 1);
+        if (lives <= 0) gameOver();
+      }
+    }
+  }
+}
+
+function updateCoins(dt) {
+  coinTimer -= dt;
+  if (coinTimer <= 0) {
+    spawnCoin();
+    coinTimer = SETTINGS.coinSpawnEvery / mods.coinRate;
+  }
+
+  const half = playerSize() / 2;
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    c.life -= dt;
+    if (c.life <= 0) { coins.splice(i, 1); continue; }
+    if (Math.hypot(c.x - player.x, c.y - player.y) < c.r + half) {
+      score += SETTINGS.coinPoints;
+      burst(c.x, c.y, COLORS.coin, 10);
+      coins.splice(i, 1);
+    }
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function gameOver() {
+  state = "over";
+  const final = Math.floor(score);
+  if (final > best) { best = final; saveBest(best); }
+}
+
+// ---------- Drawing ----------
+function draw() {
+  ctx.fillStyle = COLORS.background;
+  ctx.fillRect(0, 0, W, H);
+
+  if (state === "menu") return drawMenu();
+
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14);
+  if (mods.upsideDown) { ctx.translate(0, H); ctx.scale(1, -1); }
+
+  drawGrid();
+  drawCoins();
+  drawEnemies();
+  drawPlayer();
+  drawParticles();
+  if (mods.darkness) drawDarkness();
+
+  ctx.restore();
+
+  drawHUD();
+  drawBanner();
+  if (state === "over") drawGameOver();
+}
+
+function drawGrid() {
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+}
+
+function drawPlayer() {
+  // Blink while invincible
+  if (invincible > 0 && Math.floor(invincible * 10) % 2 === 0) return;
+  const s = playerSize();
+  ctx.fillStyle = COLORS.player;
+  ctx.shadowColor = COLORS.player;
+  ctx.shadowBlur = 15;
+  ctx.fillRect(player.x - s / 2, player.y - s / 2, s, s);
+  ctx.shadowBlur = 0;
+
+  // A "?" face, because the player doesn't know either
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  if (mods.upsideDown) ctx.scale(1, -1);
+  ctx.fillStyle = COLORS.background;
+  ctx.font = `bold ${Math.round(s * 0.8)}px Trebuchet MS`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("?", 0, 1);
+  ctx.restore();
+}
+
+function drawEnemies() {
+  const color = mods.friendlyEnemies ? COLORS.friend : COLORS.enemy;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12;
+  for (const e of enemies) {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawCoins() {
+  const pulse = 1 + Math.sin(performance.now() / 150) * 0.15;
+  ctx.fillStyle = COLORS.coin;
+  for (const c of coins) {
+    ctx.globalAlpha = c.life < 2 ? (Math.floor(c.life * 8) % 2 ? 1 : 0.3) : 1;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life / 0.6);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawDarkness() {
+  const r = 150;
+  const g = ctx.createRadialGradient(player.x, player.y, r * 0.3, player.x, player.y, r);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.97)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function text(str, x, y, size, color = COLORS.text, align = "center") {
+  ctx.fillStyle = color;
+  ctx.font = `bold ${size}px Trebuchet MS`;
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  ctx.fillText(str, x, y);
+}
+
+function drawHUD() {
+  text(`Score: ${Math.floor(score)}`, 16, 24, 22, COLORS.text, "left");
+  text("♥".repeat(Math.max(0, lives)), 16, 52, 22, COLORS.enemy, "left");
+  text(`Chaos in ${Math.ceil(chaosTimer)}`, W - 16, 24, 20, COLORS.banner, "right");
+  text(currentEvent.name, W - 16, 52, 16, "rgba(255,255,255,0.6)", "right");
+}
+
+function drawBanner() {
+  if (bannerTimer <= 0) return;
+  const grow = Math.min(1, (2.2 - bannerTimer) * 6);
+  ctx.globalAlpha = Math.min(1, bannerTimer);
+  text(bannerText, W / 2, H / 2 - 120, 44 * grow, COLORS.banner);
+  ctx.globalAlpha = 1;
+}
+
+function drawMenu() {
+  drawGrid();
+  text("I DON'T KNOW", W / 2, H / 2 - 110, 64, COLORS.player);
+  text("Random Chaos", W / 2, H / 2 - 50, 32, COLORS.banner);
+  text("Move: Arrow keys or WASD", W / 2, H / 2 + 20, 20);
+  text("Dodge red, grab yellow coins.", W / 2, H / 2 + 50, 20);
+  text(`Every ${SETTINGS.chaosEvery} seconds the rules change...`, W / 2, H / 2 + 80, 20);
+  text("Press SPACE to start", W / 2, H / 2 + 150, 26, COLORS.coin);
+  if (best > 0) text(`Best: ${best}`, W / 2, H / 2 + 190, 18, "rgba(255,255,255,0.6)");
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, 0, W, H);
+  text("GAME OVER", W / 2, H / 2 - 70, 60, COLORS.enemy);
+  text("What happened? I don't know.", W / 2, H / 2 - 15, 22);
+  text(`Score: ${Math.floor(score)}    Best: ${best}`, W / 2, H / 2 + 30, 26, COLORS.coin);
+  text("Press SPACE to play again", W / 2, H / 2 + 90, 22);
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
