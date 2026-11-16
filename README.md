@@ -2,9 +2,13 @@
 
 A small browser game where you survive as long as you can while the rules change every 10 seconds.
 
+### ▶ [Play online](https://aroojs12-sketch.github.io/I-don-t-know/)
+
+Opens in your browser. Nothing to download. You need a keyboard to play.
+
 You are a blue square with a **?** on it. Dodge the red enemies, grab the yellow coins, and try to keep up when the game suddenly flips your controls, turns off the lights or makes you giant.
 
-## How to play
+## Play without internet
 
 1. Download this repository (green **Code** button → **Download ZIP**) and unzip it.
 2. Double-click **`I-Dont-Know-Game.html`**. It opens in your web browser.
