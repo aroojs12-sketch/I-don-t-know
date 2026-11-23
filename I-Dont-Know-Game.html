@@ -19,6 +19,7 @@
       max-height: 100vh;
       border-radius: 12px;
       box-shadow: 0 0 40px rgba(120, 90, 255, 0.35);
+      touch-action: none;
     }
   </style>
 </head>
@@ -128,6 +129,34 @@ window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
 function isDown(...names) { return names.some(n => keys[n]); }
 
+// ---------- Mouse / trackpad / touch ----------
+// Move the pointer over the game and your square follows it.
+// Click (or tap) to start. Pressing a movement key switches back to keyboard.
+const pointer = { x: 0, y: 0, active: false };
+
+function updatePointer(e) {
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = (e.clientX - rect.left) * (W / rect.width);
+  pointer.y = (e.clientY - rect.top) * (H / rect.height);
+  pointer.active = true;
+}
+canvas.addEventListener("pointermove", updatePointer);
+canvas.addEventListener("pointerdown", e => {
+  updatePointer(e);
+  if (state !== "play") startGame();
+});
+canvas.addEventListener("pointerleave", e => {
+  if (e.pointerType === "mouse") pointer.active = false;
+});
+canvas.addEventListener("pointerup", e => {
+  if (e.pointerType !== "mouse") pointer.active = false; // finger lifted
+});
+window.addEventListener("keydown", e => {
+  if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(e.key.toLowerCase())) {
+    pointer.active = false;
+  }
+});
+
 // ---------- Saving best score ----------
 function loadBest() {
   try { return Number(localStorage.getItem("idk-best")) || 0; } catch (e) { return 0; }
@@ -235,11 +264,25 @@ function update(realDt) {
 function updatePlayer(dt) {
   let dx = (isDown("arrowright", "d") ? 1 : 0) - (isDown("arrowleft", "a") ? 1 : 0);
   let dy = (isDown("arrowdown", "s") ? 1 : 0) - (isDown("arrowup", "w") ? 1 : 0);
-  if (mods.flipControls) { dx = -dx; dy = -dy; }
+  let pull = 1; // how hard to push toward the target (0 to 1)
+
+  if (dx === 0 && dy === 0 && pointer.active) {
+    // Head toward the pointer
+    let tx = pointer.x, ty = pointer.y;
+    if (mods.upsideDown) ty = H - ty;                 // screen is flipped, so flip the pointer too
+    if (mods.flipControls) { tx = W - tx; ty = H - ty; } // chase the mirror spot instead
+    dx = tx - player.x;
+    dy = ty - player.y;
+    const dist = Math.hypot(dx, dy);
+    // Slow down near the pointer so the square doesn't jitter
+    pull = Math.min(1, dist / 40);
+  } else if (mods.flipControls) {
+    dx = -dx; dy = -dy;
+  }
 
   const len = Math.hypot(dx, dy) || 1;
-  const targetVx = (dx / len) * SETTINGS.playerSpeed;
-  const targetVy = (dy / len) * SETTINGS.playerSpeed;
+  const targetVx = (dx / len) * SETTINGS.playerSpeed * pull;
+  const targetVy = (dy / len) * SETTINGS.playerSpeed * pull;
 
   if (mods.slippery) {
     // Slide around like on ice
@@ -464,10 +507,10 @@ function drawMenu() {
   drawGrid();
   text("I DON'T KNOW", W / 2, H / 2 - 110, 64, COLORS.player);
   text("Random Chaos", W / 2, H / 2 - 50, 32, COLORS.banner);
-  text("Move: Arrow keys or WASD", W / 2, H / 2 + 20, 20);
+  text("Move: Arrow keys, WASD, or the mouse / trackpad", W / 2, H / 2 + 20, 20);
   text("Dodge red, grab yellow coins.", W / 2, H / 2 + 50, 20);
   text(`Every ${SETTINGS.chaosEvery} seconds the rules change...`, W / 2, H / 2 + 80, 20);
-  text("Press SPACE to start", W / 2, H / 2 + 150, 26, COLORS.coin);
+  text("Press SPACE or click to start", W / 2, H / 2 + 150, 26, COLORS.coin);
   if (best > 0) text(`Best: ${best}`, W / 2, H / 2 + 190, 18, "rgba(255,255,255,0.6)");
 }
 
@@ -477,7 +520,7 @@ function drawGameOver() {
   text("GAME OVER", W / 2, H / 2 - 70, 60, COLORS.enemy);
   text("What happened? I don't know.", W / 2, H / 2 - 15, 22);
   text(`Score: ${Math.floor(score)}    Best: ${best}`, W / 2, H / 2 + 30, 26, COLORS.coin);
-  text("Press SPACE to play again", W / 2, H / 2 + 90, 22);
+  text("Press SPACE or click to play again", W / 2, H / 2 + 90, 22);
 }
 
 // ---------- Main loop ----------

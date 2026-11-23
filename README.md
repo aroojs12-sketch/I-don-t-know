@@ -4,7 +4,7 @@ A small browser game where you survive as long as you can while the rules change
 
 ### ▶ [Play online](https://aroojs12-sketch.github.io/I-don-t-know/)
 
-Opens in your browser. Nothing to download. You need a keyboard to play.
+Opens in your browser. Nothing to download. Play with the keyboard, a mouse or a trackpad.
 
 You are a blue square with a **?** on it. Dodge the red enemies, grab the yellow coins, and try to keep up when the game suddenly flips your controls, turns off the lights or makes you giant.
 
@@ -12,16 +12,18 @@ You are a blue square with a **?** on it. Dodge the red enemies, grab the yellow
 
 1. Download this repository (green **Code** button → **Download ZIP**) and unzip it.
 2. Double-click **`I-Dont-Know-Game.html`**. It opens in your web browser.
-3. Press **Space** to start.
+3. Press **Space** or click the game to start.
 
 Nothing needs to be installed. You can also open `index.html`, but it needs `game.js` in the same folder.
 
 ## Controls
 
-| Action | Keys |
-| --- | --- |
-| Move | Arrow keys or W A S D |
-| Start / play again | Space or Enter |
+| Action | Keyboard | Mouse / trackpad |
+| --- | --- | --- |
+| Move | Arrow keys or W A S D | Move the pointer over the game. Your square follows it |
+| Start / play again | Space or Enter | Click the game |
+
+Pressing a movement key switches back to keyboard control. When **Controls Flipped!** is on, the square goes to the opposite side of the screen from your pointer.
 
 ## Rules
 
