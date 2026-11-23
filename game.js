@@ -239,15 +239,23 @@ function updatePlayer(dt) {
   let pull = 1; // how hard to push toward the target (0 to 1)
 
   if (dx === 0 && dy === 0 && pointer.active) {
-    // Head toward the pointer
     let tx = pointer.x, ty = pointer.y;
     if (mods.upsideDown) ty = H - ty;                 // screen is flipped, so flip the pointer too
-    if (mods.flipControls) { tx = W - tx; ty = H - ty; } // chase the mirror spot instead
+    if (mods.flipControls) { tx = W - tx; ty = H - ty; } // go to the mirror spot instead
+
+    if (!mods.slippery) {
+      // Jump straight to the pointer, no delay
+      const half = playerSize() / 2;
+      player.x = Math.max(half, Math.min(W - half, tx));
+      player.y = Math.max(half, Math.min(H - half, ty));
+      player.vx = player.vy = player.gvy = 0;
+      return;
+    }
+
+    // On ice you still slide toward the pointer
     dx = tx - player.x;
     dy = ty - player.y;
-    const dist = Math.hypot(dx, dy);
-    // Slow down near the pointer so the square doesn't jitter
-    pull = Math.min(1, dist / 40);
+    pull = Math.min(1, Math.hypot(dx, dy) / 40);
   } else if (mods.flipControls) {
     dx = -dx; dy = -dy;
   }

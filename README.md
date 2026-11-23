@@ -20,10 +20,10 @@ Nothing needs to be installed. You can also open `index.html`, but it needs `gam
 
 | Action | Keyboard | Mouse / trackpad |
 | --- | --- | --- |
-| Move | Arrow keys or W A S D | Move the pointer over the game. Your square follows it |
+| Move | Arrow keys or W A S D | Move the pointer over the game. Your square sits right under it |
 | Start / play again | Space or Enter | Click the game |
 
-Pressing a movement key switches back to keyboard control. When **Controls Flipped!** is on, the square goes to the opposite side of the screen from your pointer.
+Pressing a movement key switches back to keyboard control. When **Controls Flipped!** is on, the square goes to the opposite side of the screen from your pointer. On **Ice Floor!** it slides after the pointer instead of jumping to it.
 
 ## Rules
 
