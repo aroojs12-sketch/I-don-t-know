@@ -59,6 +59,19 @@ const COLORS = {
 };
 
 
+// ============ SOUNDS — change the beeps! ============
+// Each sound is a list of notes: [frequency (Hz), length (seconds)].
+// "wave" can be "sine", "square", "triangle" or "sawtooth".
+const SOUNDS = {
+  volume: 0.25,  // 0 = silent, 1 = loud
+  start:    { wave: "triangle", notes: [[330, 0.08], [440, 0.08], [660, 0.14]] },
+  coin:     { wave: "square",   notes: [[988, 0.05], [1319, 0.12]] },
+  hit:      { wave: "sawtooth", notes: [[180, 0.1], [90, 0.2]] },
+  friend:   { wave: "sine",     notes: [[523, 0.06], [784, 0.1]] },
+  chaos:    { wave: "square",   notes: [[440, 0.07], [370, 0.07], [554, 0.07], [415, 0.07], [660, 0.16]] },
+  gameOver: { wave: "triangle", notes: [[392, 0.18], [330, 0.18], [262, 0.18], [196, 0.45]] },
+};
+
 // ============ CHAOS EVENTS — add your own! ============
 // Each event changes "mods" (the game's rules).
 // Before every new event, all mods go back to normal.
@@ -157,6 +170,43 @@ window.addEventListener("keydown", e => {
   }
 });
 
+// ---------- Sound ----------
+// Sounds are made in code, so no sound files are needed. Press M to mute.
+let audio = null;
+let muted = loadMuted();
+
+function playSound(name) {
+  const s = SOUNDS[name];
+  if (muted || !s) return;
+  try {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume();
+    let t = audio.currentTime;
+    for (const [freq, len] of s.notes) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = s.wave;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(SOUNDS.volume, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + len); // fade out each note
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t);
+      osc.stop(t + len);
+      t += len;
+    }
+  } catch (e) { /* no sound available, keep playing */ }
+}
+
+window.addEventListener("keydown", e => {
+  if (e.key.toLowerCase() === "m") {
+    muted = !muted;
+    try { localStorage.setItem("idk-muted", muted ? "1" : "0"); } catch (err) { /* ignore */ }
+  }
+});
+function loadMuted() {
+  try { return localStorage.getItem("idk-muted") === "1"; } catch (e) { return false; }
+}
+
 // ---------- Saving best score ----------
 function loadBest() {
   try { return Number(localStorage.getItem("idk-best")) || 0; } catch (e) { return 0; }
@@ -183,6 +233,7 @@ function startGame() {
   shake = 0;
   showBanner(currentEvent.name);
   state = "play";
+  playSound("start");
 }
 
 function triggerChaos() {
@@ -196,6 +247,7 @@ function triggerChaos() {
   next.apply(mods);
   player.gvy = 0;
   showBanner(next.name);
+  playSound("chaos");
 }
 
 function showBanner(text) {
@@ -343,6 +395,7 @@ function updateEnemies(dt) {
         score += SETTINGS.friendPoints;
         burst(e.x, e.y, COLORS.friend);
         enemies.splice(i, 1);
+        playSound("friend");
       } else if (invincible <= 0) {
         lives--;
         invincible = 1.5;
@@ -350,6 +403,7 @@ function updateEnemies(dt) {
         burst(player.x, player.y, COLORS.enemy, 24);
         enemies.splice(i, 1);
         if (lives <= 0) gameOver();
+        else playSound("hit");
       }
     }
   }
@@ -371,6 +425,7 @@ function updateCoins(dt) {
       score += SETTINGS.coinPoints;
       burst(c.x, c.y, COLORS.coin, 10);
       coins.splice(i, 1);
+      playSound("coin");
     }
   }
 }
@@ -387,6 +442,7 @@ function updateParticles(dt) {
 
 function gameOver() {
   state = "over";
+  playSound("gameOver");
   const final = Math.floor(score);
   if (final > best) { best = final; saveBest(best); }
 }
@@ -501,6 +557,7 @@ function drawHUD() {
   text("♥".repeat(Math.max(0, lives)), 16, 52, 22, COLORS.enemy, "left");
   text(`Chaos in ${Math.ceil(chaosTimer)}`, W - 16, 24, 20, COLORS.banner, "right");
   text(currentEvent.name, W - 16, 52, 16, "rgba(255,255,255,0.6)", "right");
+  text(muted ? "Sound off (M)" : "Sound on (M)", W - 16, H - 18, 14, "rgba(255,255,255,0.4)", "right");
 }
 
 function drawBanner() {
@@ -520,6 +577,7 @@ function drawMenu() {
   text(`Every ${SETTINGS.chaosEvery} seconds the rules change...`, W / 2, H / 2 + 80, 20);
   text("Press SPACE or click to start", W / 2, H / 2 + 150, 26, COLORS.coin);
   if (best > 0) text(`Best: ${best}`, W / 2, H / 2 + 190, 18, "rgba(255,255,255,0.6)");
+  text(muted ? "Sound off: press M to turn on" : "Sound on: press M to mute", W / 2, H - 24, 14, "rgba(255,255,255,0.4)");
 }
 
 function drawGameOver() {

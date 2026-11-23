@@ -22,6 +22,7 @@ Nothing needs to be installed. You can also open `index.html`, but it needs `gam
 | --- | --- | --- |
 | Move | Arrow keys or W A S D | Move the pointer over the game. Your square sits right under it |
 | Start / play again | Space or Enter | Click the game |
+| Sound on / off | M | |
 
 Pressing a movement key switches back to keyboard control. When **Controls Flipped!** is on, the square goes to the opposite side of the screen from your pointer. On **Ice Floor!** it slides after the pointer instead of jumping to it.
 
@@ -57,6 +58,7 @@ Open `game.js` in any text editor. At the top you'll find:
 
 - **`SETTINGS`**: speed, lives, how often chaos happens, points and more.
 - **`COLORS`**: the colors of everything on screen.
+- **`SOUNDS`**: the volume and the beeps for starting, coins, getting hit, hugging a friend, chaos and game over. Each sound is a list of notes (pitch and length), so you can make up your own tunes.
 - **`CHAOS_EVENTS`**: the list of chaos events. Copy a line to add your own.
 
 `I-Dont-Know-Game.html` is a copy of `index.html` and `game.js` combined into one file, so changes to `game.js` don't show up in it automatically.
